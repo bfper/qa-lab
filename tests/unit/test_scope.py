@@ -186,12 +186,12 @@ def test_require_gerente(make_user, level, is_admin, expected_status):
 @pytest.mark.parametrize(
     "level, is_admin, owner, shared, expected_status",
     [
-        pytest.param("Gerenciar", False, "other", [], None, id="manager_reaches_any_document"),
-        pytest.param("Visualizar", False, "own", [], None, id="viewer_reaches_own_document"),
+        pytest.param("Gerenciar", False, "other", "none", None, id="manager_reaches_any_document"),
+        pytest.param("Visualizar", False, "own", "none", None, id="viewer_reaches_own_document"),
         pytest.param("Visualizar", False, "other", "self", None, id="viewer_reaches_shared_document"),
-        pytest.param("Visualizar", False, "other", [], 403, id="viewer_blocked_no_sharing"),
+        pytest.param("Visualizar", False, "other", "none", 403, id="viewer_blocked_no_sharing"),
         pytest.param("Visualizar", False, "other", "stranger", 403, id="viewer_blocked_shared_with_someone_else"),
-        pytest.param("Editar", False, "other", [], 403, id="editor_blocked_no_sharing"),
+        pytest.param("Editar", False, "other", "none", 403, id="editor_blocked_no_sharing"),
     ],
 )
 def test_check_acesso_compartilhavel(
@@ -200,7 +200,7 @@ def test_check_acesso_compartilhavel(
     me = make_mentorando(email=OWNER_EMAIL)
     them = make_mentorando(email=OTHER_EMAIL)
     owner_id = me.id if owner == "own" else them.id
-    ids_com_acesso = {"self": [me.id], "stranger": [999_999], }.get(shared, [])
+    ids_com_acesso = {"none": [], "self": [me.id], "stranger": [999_999]}[shared]
     user = make_user(email=OWNER_EMAIL, level=level, is_admin=is_admin)
 
     # TODO

@@ -25,12 +25,21 @@ def _require_app_source():
             require_gerente,
         )
     except ImportError as exc:
-        pytest.skip(
-            f"app source not importable ({exc}). "
-            f"Clone mentoria into MENTORIA_SRC (currently "
-            f"{os.environ.get('MENTORIA_SRC', '<unset>')}) and remove its git remote.",
-            allow_module_level=True,
-        )
+        missing = str(exc)
+        if "No module named 'app" in missing:
+            hint = (
+                f"MENTORIA_SRC points at "
+                f"{os.environ.get('MENTORIA_SRC', '<unset>')} — check that the "
+                f"clone is there and that it contains app/scope.py."
+            )
+        else:
+            hint = (
+                "This is a missing dependency of the app itself, not a path "
+                "problem. Install it in the lab venv: pip install -r "
+                "requirements.txt"
+            )
+        pytest.skip(f"app source not importable ({missing}). {hint}",
+                    allow_module_level=True)
 
 
 _require_app_source()
@@ -53,16 +62,26 @@ def session(engine):
         yield sess
 
 
+# Non-null columns of Mentorando that no scope test cares about. They exist
+# only to satisfy the schema. Add to this dict when a NOT NULL constraint
+# fails; never add the field to individual tests, or every test grows noise
+# that hides what it is actually about.
+REQUIRED_FIELD_DEFAULTS = {
+    "nivel_formacao": "Mestrado",
+}
+
+
 @pytest.fixture
 def make_mentorando(session):
     """Insert a Mentorando and return it.
 
-    Keep the signature minimal: if app.models requires more non-null fields,
-    add them here as defaults rather than in every test.
+    Only email and nome are meaningful to these tests; everything else comes
+    from REQUIRED_FIELD_DEFAULTS. Pass any field explicitly to override it.
     """
 
     def _make(email: str, nome: str = "Test Subject", **extra) -> Mentorando:
-        item = Mentorando(email=email, nome=nome, **extra)
+        fields = {**REQUIRED_FIELD_DEFAULTS, "email": email, "nome": nome, **extra}
+        item = Mentorando(**fields)
         session.add(item)
         session.commit()
         session.refresh(item)

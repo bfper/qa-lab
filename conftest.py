@@ -4,6 +4,12 @@ Single responsibility: make it impossible for a test run to reach anything
 that is not on this machine. If any configured endpoint resolves to a
 non-local host, the session aborts before a single test is collected.
 
+This runs at MODULE level, not in pytest_configure. pytest imports the
+conftests along the path from rootdir down to the target directory, and only
+then calls pytest_configure — so a guard living in the hook fires after
+tests/unit/conftest.py has already imported the app. Module level is the
+only place early enough.
+
 This is deliberately blunt. A false positive costs you ten seconds of
 editing .env. A false negative costs you production data.
 """
@@ -32,6 +38,11 @@ GUARDED_VARS = (
 FORBIDDEN_SUBSTRINGS = ("perazzo.cloud", "srv1797282")
 
 
+def _abort(message: str) -> None:
+    """Stop the run now. Raising beats pytest.exit() at module import time."""
+    raise pytest.UsageError(f"\n\n{message}\n")
+
+
 def _load_dotenv() -> None:
     """Minimal .env loader. Avoids a dependency for six lines of parsing."""
     env_file = ROOT / ".env"
@@ -50,7 +61,7 @@ def _extract_host(value: str) -> str:
     value = value.strip()
     if "://" in value:
         return (urlparse(value).hostname or "").lower()
-    if "@" in value:  # postgres://user:pass@host:port/db already handled above
+    if "@" in value:
         value = value.rsplit("@", 1)[1]
     return value.split(":")[0].strip().lower()
 
@@ -59,54 +70,55 @@ def _assert_local(var: str, value: str) -> None:
     lowered = value.lower()
     for needle in FORBIDDEN_SUBSTRINGS:
         if needle in lowered:
-            pytest.exit(
-                f"\n\nABORTED: {var} contains '{needle}'.\n"
+            _abort(
+                f"ABORTED: {var} contains '{needle}'.\n"
                 f"  value: {value}\n"
-                f"The lab must never point at production.\n",
-                returncode=3,
+                f"The lab must never point at production."
             )
 
     host = _extract_host(value)
     if host and host not in ALLOWED_HOSTS:
-        pytest.exit(
-            f"\n\nABORTED: {var} resolves to a non-local host '{host}'.\n"
+        _abort(
+            f"ABORTED: {var} resolves to a non-local host '{host}'.\n"
             f"  value: {value}\n"
             f"Allowed: {', '.join(sorted(ALLOWED_HOSTS))}\n"
-            f"Fix .env before running again.\n",
-            returncode=3,
+            f"Fix .env before running again."
         )
 
 
-def pytest_configure(config: pytest.Config) -> None:
-    _load_dotenv()
-
-    for var in GUARDED_VARS:
-        value = os.environ.get(var)
-        if value:
-            _assert_local(var, value)
-
-    # Make the cloned app importable without installing it.
-    for var in ("MENTORIA_SRC", "AUTH_SRC"):
+def _add_app_source_to_path() -> None:
+    """Make the cloned app importable without installing it."""
+    for var in ("MENTORIA_SRC",):
         raw = os.environ.get(var)
         if not raw:
             continue
         if not Path(raw).is_absolute():
-            pytest.exit(
-                f"\n\nABORTED: {var} must be an absolute path, got '{raw}'.\n"
-                f"Relative paths resolve differently for pytest and for docker "
-                f"compose. Use /home/<user>/lab/src/... in .env\n",
-                returncode=3,
+            _abort(
+                f"ABORTED: {var} must be an absolute path, got '{raw}'.\n"
+                f"Relative paths resolve differently for pytest and for "
+                f"docker compose. Use /home/<user>/lab/src/... in .env"
             )
         path = Path(raw)
         if path.exists() and str(path) not in sys.path:
             sys.path.insert(0, str(path))
 
-    config.stash["qalab_guard_passed"] = True
+
+# --- runs at import, before any other conftest ------------------------------
+_load_dotenv()
+
+for _var in GUARDED_VARS:
+    _value = os.environ.get(_var)
+    if _value:
+        _assert_local(_var, _value)
+
+_add_app_source_to_path()
 
 
 def pytest_report_header(config: pytest.Config) -> list[str]:
+    src = os.environ.get("MENTORIA_SRC", "<unset>")
     return [
         f"qa-lab: host guard OK (allowed: {', '.join(sorted(ALLOWED_HOSTS))})",
         f"qa-lab: BASE_URL={os.environ.get('BASE_URL', '<unset>')} "
         f"AUTH={os.environ.get('AUTH_BASE_URL', '<unset>')}",
+        f"qa-lab: MENTORIA_SRC={src}",
     ]
