@@ -1,0 +1,70 @@
+# qa-lab stack. Disposable by design.
+#
+# Isolation rules baked in:
+#   - project name prefix "qalab-" on every container
+#   - high ports only (15432 / 18001 / 18002) — never 80, 443, 5432, 8000
+#   - bound to 127.0.0.1, so nothing is reachable from the network
+#   - private network and named volume, nothing external
+#   - `docker compose down -v` wipes everything and touches nothing else
+name: qalab
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: qalab-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-qalab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qalab}
+      POSTGRES_DB: postgres
+      LAB_DATABASES: ${AUTH_DB:-auth},${MENTORIA_DB:-mentoria}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - qalab-pgdata:/var/lib/postgresql/data
+      - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/00-init-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-qalab}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [qalab]
+
+  auth:
+    build:
+      context: ${AUTH_SRC:?set AUTH_SRC in .env (absolute path)}
+    container_name: qalab-auth
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-qalab}:${POSTGRES_PASSWORD:-qalab}@postgres:5432/${AUTH_DB:-auth}
+      JWT_SECRET: ${JWT_SECRET:-qalab-not-a-real-secret}
+    ports:
+      - "127.0.0.1:18001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [qalab]
+
+  mentoria:
+    build:
+      context: ${MENTORIA_SRC:?set MENTORIA_SRC in .env (absolute path)}
+    container_name: qalab-mentoria
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-qalab}:${POSTGRES_PASSWORD:-qalab}@postgres:5432/${MENTORIA_DB:-mentoria}
+      # CONFIRM the real variable name before trusting this line.
+      AUTH_BASE_URL: http://auth:8000
+      JWT_SECRET: ${JWT_SECRET:-qalab-not-a-real-secret}
+    ports:
+      - "127.0.0.1:18002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_started
+    networks: [qalab]
+
+volumes:
+  qalab-pgdata:
+    name: qalab-pgdata
+
+networks:
+  qalab:
+    name: qalab-net

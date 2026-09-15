@@ -1,0 +1,16 @@
+# Week 1 — unit
+pytest==8.3.4
+pytest-randomly==3.16.0
+sqlmodel==0.0.22
+
+# Week 2-3 — E2E
+pytest-playwright==0.6.2
+
+# Week 5 — API
+httpx==0.28.1
+
+# Week 6 — data oracle
+psycopg[binary]==3.2.3
+
+# Reporting (week 7)
+allure-pytest==2.13.5

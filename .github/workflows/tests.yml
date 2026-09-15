@@ -1,0 +1,31 @@
+# Week 4 deliverable. Committed now so the file exists; it will fail on the
+# first run — that is expected and is the lesson. One problem at a time.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: unit (scope rules)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The app under test is not vendored here. Week 4 decides how CI gets
+      # it: a second checkout of a private repo, or a published image.
+      - name: Check out app under test
+        run: echo "TODO (week 4) — see README, 'CI and the app under test'"
+
+      - name: Run unit tests
+        run: pytest tests/unit -m unit
