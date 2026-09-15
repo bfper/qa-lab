@@ -346,9 +346,12 @@ os casos estão nomeados, as asserções são suas. O que *não* pode aparecer �
 **O hook de commit bloqueia:**
 
 ```bash
-echo "email: pessoa.real@gmail.com" > /tmp/x.md && cp /tmp/x.md .
+printf 'contato: alguem@%s\n' "provedorqualquer.com" > x.md
 git add x.md && git commit -m "test"
 ```
+
+O endereço é montado em tempo de execução de propósito: se estivesse
+escrito por extenso aqui, o próprio hook bloquearia o commit deste arquivo.
 
 Esperado: `COMMIT BLOCKED: real-looking email address staged`. Limpe depois:
 

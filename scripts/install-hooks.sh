@@ -21,18 +21,30 @@ staged=$(git diff --cached --name-only --diff-filter=ACM)
 
 fail() { echo ""; echo "COMMIT BLOCKED: $1"; echo ""; exit 1; }
 
-# Files that legitimately contain the patterns this hook looks for: the
-# guard's own configuration, and documentation that names production on
-# purpose. Without this list the hook blocks its own repository.
-is_allowlisted() {
+# Two separate allowlists, because the two checks have different scopes.
+#
+# Hostnames: the guard's own config declares them, and the docs name
+# production on purpose ("the lab must never reach perazzo.cloud"). Without
+# this the hook blocks its own repository.
+allowlisted_for_hostname() {
   case "$1" in
-    conftest.py|scripts/install-hooks.sh) return 0 ;;
-    *.md) return 0 ;;
+    conftest.py|scripts/install-hooks.sh|*.md) return 0 ;;
     *) return 1 ;;
   esac
 }
 
-# 1. Secrets and dumps must never be committed. No exceptions, no allowlist.
+# Emails: only this script, which contains the pattern itself. Markdown is
+# NOT exempt — a real address in a README leaks exactly as permanently as
+# one in a .py, and documentation is where an address is most likely to be
+# pasted by accident.
+allowlisted_for_email() {
+  case "$1" in
+    scripts/install-hooks.sh) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# 1. Secrets and dumps must never be committed. No allowlist, no exceptions.
 for f in $staged; do
   case "$f" in
     .env|*/.env)
@@ -44,24 +56,26 @@ for f in $staged; do
   esac
 done
 
-# 2 and 3 are checked per file, so the allowlist can apply.
 for f in $staged; do
-  is_allowlisted "$f" && continue
-
+  # Strip the leading '+' of the diff: without it, a line like
+  # "+@pytest.fixture" reads as the email address "+@pytest.fixture".
   added=$(git diff --cached -U0 -- "$f" | grep -E '^\+[^+]' | sed 's/^+//' || true)
   [ -z "$added" ] && continue
 
   # 2. Production hostnames must not appear in code or config.
-  if echo "$added" | grep -qiE 'perazzo\.cloud|srv1797282'; then
+  if ! allowlisted_for_hostname "$f" \
+     && echo "$added" | grep -qiE 'perazzo\.cloud|srv1797282'; then
     echo "In $f:"
     echo "$added" | grep -iE 'perazzo\.cloud|srv1797282' | head -3
     fail "production hostname in $f. The lab is local-only."
   fi
 
   # 3. Real-looking email addresses. Test data uses @qalab.local.
+  allowlisted_for_email "$f" && continue
+
   suspects=$(echo "$added" \
     | grep -oiE '[a-z0-9._%+-]*[a-z0-9]@[a-z0-9.-]+\.[a-z]{2,}' \
-    | grep -viE '@qalab\.local|@example\.(com|org)|@exemplo\.com|noreply@|@users\.noreply\.github\.com' \
+    | grep -viE '@qalab\.local|@example\.(com|org)|@exemplo\.com|@dominio\.com|noreply@|@users\.noreply\.github\.com|^git@github\.com$' \
     | sort -u || true)
 
   if [ -n "$suspects" ]; then
