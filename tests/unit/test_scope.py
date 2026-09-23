@@ -95,7 +95,12 @@ def test_check_scope_by_role_and_target(
     # TODO: call check_scope(session, user, target_id).
     # When expected_status is None it must return None.
     # Otherwise it must raise HTTPException with that status_code.
-    raise NotImplementedError
+    if expected_status is None:
+        assert check_scope(session, user, target_id) is None
+    else:
+        with pytest.raises(HTTPException) as exc_info:
+            check_scope(session, user, target_id)
+        assert exc_info.value.status_code == expected_status
 
 
 # ---------------------------------------------------------------------------
