@@ -45,11 +45,12 @@ OTHER_EMAIL = "other@qalab.local"
         pytest.param("Visualizar", True, True, id="admin_flag_overrides_level"),
         pytest.param("", False, False, id="empty_level_is_not_manager"),
         pytest.param(None, False, False, id="null_level_is_not_manager"),
-        # The next three probe normalization. Production compares the string
-        # exactly, so decide what SHOULD happen before you assert.
+        # Normalization: surrounding whitespace is tolerated, but case is not.
+        # Authorization fails closed — any level that is not exactly
+        # "Gerenciar" is denied, since mentoria holds confidential research data.
         pytest.param("  Gerenciar  ", False, True, id="level_with_surrounding_spaces"),
-        pytest.param("gerenciar", False, None, id="level_lowercase_UNDECIDED"),
-        pytest.param("GERENCIAR", False, None, id="level_uppercase_UNDECIDED"),
+        pytest.param("gerenciar", False, False, id="level_lowercase_fails_closed"),
+        pytest.param("GERENCIAR", False, False, id="level_uppercase_fails_closed"),
     ],
 )
 def test_is_gerente(make_user, level, is_admin, expected):
