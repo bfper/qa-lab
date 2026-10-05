@@ -178,8 +178,14 @@ def test_get_proprio_mentorando_without_cadastro(
 def test_require_gerente(make_user, level, is_admin, expected_status):
     user = make_user(level=level, is_admin=is_admin)
 
-    # TODO
-    raise NotImplementedError
+    if expected_status is None:
+        # Allowed: the guard returns None and lets the action proceed.
+        assert require_gerente(user) is None
+    else:
+        # Blocked: the guard must stop the action with the expected HTTP status.
+        with pytest.raises(HTTPException) as exc_info:
+            require_gerente(user)
+        assert exc_info.value.status_code == expected_status
 
 
 # ---------------------------------------------------------------------------
