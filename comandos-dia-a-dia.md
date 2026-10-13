@@ -355,3 +355,8 @@ git status       # nada pendente?
 git push
 make nuke        # se tiver usado containers
 ```
+
+## Pegadinhas de ambiente (S6, 07/10)
+
+- Rodar o pytest sempre de `~/lab/qa-lab`. De `~/lab` dá *collection error* (pacote `app` duplicado entre mentoria e auth-service).
+- Falta `python-multipart` no venv: `pip install python-multipart`.
