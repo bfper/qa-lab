@@ -11,6 +11,10 @@ jobs:
   unit:
     name: unit (scope rules)
     runs-on: ubuntu-latest
+    env:
+      # Required by the host guard in conftest.py. Nothing listens here in CI;
+      # unit tests never call the auth service.
+      AUTH_SERVICE_URL: http://localhost:18001
     steps:
       - uses: actions/checkout@v4
 

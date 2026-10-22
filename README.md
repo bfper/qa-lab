@@ -1,176 +1,159 @@
 # qa-lab
 
-Repositório de testes do **MP Mentoria**. Construído durante a Fase B da
-Rota v2 (15/09 → 09/11) como portfólio de Software Quality Engineer.
+Test suite for a local clone of two applications, MP Mentoria and
+Auth-service, focused on one risk: a mentor seeing data that belongs to
+another mentor.
 
-> Este README está em português porque é documento de trabalho. Na semana 7
-> ele é reescrito em inglês, contando a história do pipeline — é o item que
-> pesa mais em triagem de recrutador estrangeiro.
+## Why this exists
 
-## Setup — WSL2
+MP Mentoria is an environment where mentors record information about their
+mentees and keep research project knowledge in one place. Auth-service is a
+centralized application where the admin manages access for all mentors and
+mentees.
 
-Os arquivos precisam morar **dentro** do sistema de arquivos do Linux
-(`~/qa-lab`). Se ficarem em `/mnt/c` ou `/mnt/d`, você perde velocidade de
-I/O e ganha problema de permissão.
+This suite checks that the access guard works as defined, so mentee data stays
+protected: a mentor must never see another mentor's mentee. The data is
+confidential research information, so this is the highest risk in the product.
+
+## Approach
+
+The chosen technique is a decision table covering how MP Mentoria and
+Auth-service decide access together. The table lists every combination of
+token, app access, permission level and target, so no case depends on memory.
+Each rule has an id (R1–R14), and the same id will appear in the test names.
+
+Tests run at the API level. A unit test proves the guard decides correctly,
+but it does not prove that every route calls the guard. API tests check what a
+user actually gets, with both systems working together.
+
+## What is covered
+
+The access rules are defined in
+[docs/decision-tables/check-scope.md](docs/decision-tables/check-scope.md):
+14 rules. R13 (shared access) is still open on purpose: the code suggests
+sharing works per document, not per mentee, so its expected result is TBD.
+
+## Current status
+
+Unit tests, run on 2026-10-19: **23 passed, 12 failed, 2 skipped.**
+
+The 12 failures are scaffolds that raise `NotImplementedError`: tests that
+were named but not written yet. They are being triaged: some will become API
+scenarios, the rest will be removed with a commit explaining why.
+
+API scenarios: not started yet (see [Next](#next)).
+
+## How to run
+
+Requirements: WSL2 (Ubuntu). Keep the files inside the Linux filesystem
+(`~/lab`), not in `/mnt/c`: it is faster and avoids permission problems.
+
+### Structure
+
+```
+~/lab/
+├── qa-lab/          <- this repository (public, on GitHub)
+│   ├── .venv/
+│   ├── conftest.py  <- host lock
+│   ├── tests/
+│   ├── docker/
+│   └── .env         <- points to ../src (absolute paths)
+└── src/             <- OUTSIDE the repository, on purpose
+    ├── mentoria/
+    └── auth-service/
+```
+
+`src/` is a sibling of `qa-lab`, not a child. If it lived inside, one careless
+`git add -f` could push the application code, and its history, to this public
+repository. A separate folder makes that accident impossible, not just
+unlikely.
+
+`~/lab/qa-lab` is where you run everything: `make`, `pytest`, `git`.
+
+### Setup
 
 ```bash
 sudo apt update && sudo apt install -y python3-venv python3-pip git make
 git config --global core.autocrlf input
 
-mkdir -p ~/lab/src && cd ~/lab
-# copie o conteúdo deste pacote para ~/lab/qa-lab
+mkdir -p ~/lab/src
+git clone <this-repo-url> ~/lab/qa-lab
 
 cd ~/lab/qa-lab
 make setup
 source .venv/bin/activate
 ```
 
-No Docker Desktop: Settings → Resources → WSL Integration, habilitar para
-Ubuntu-24.04.
+### Application under test
 
-### Estrutura
-
-```
-~/lab/
-├── qa-lab/          <- ESTE repositório. É o que vai para o GitHub.
-│   ├── .venv/
-│   ├── conftest.py  <- trava de host
-│   ├── tests/
-│   ├── docker/
-│   └── .env         <- aponta para ../src (absoluto)
-└── src/             <- FORA do repositório, de propósito
-    ├── mentoria/
-    └── auth-service/
-```
-
-`src/` é irmão de `qa-lab`, não filho. Se ficasse dentro, bastaria um
-`git add -f` distraído para o código do app — e o histórico dele — entrar no
-repositório público. Pasta separada torna o acidente impossível em vez de
-improvável.
-
-`~/lab/qa-lab` é onde você roda tudo: `make`, `pytest`, `git`.
-
-### O app sob teste
-
-Clone **sem remote**, dentro de `~/lab/src`:
+Clone **without a remote**, inside `~/lab/src`:
 
 ```bash
 cd ~/lab/src
-git clone --depth 1 <caminho-do-repo-mentoria> mentoria
+git clone --depth 1 <repo-path-mentoria> mentoria
 cd mentoria && git remote remove origin
 
 cd ~/lab/src
-git clone --depth 1 <caminho-do-repo-auth> auth-service
+git clone --depth 1 <repo-path-auth> auth-service
 cd auth-service && git remote remove origin
 ```
 
-Um cinto extra em cada clone:
+Extra safety for each clone:
 
 ```bash
-printf '#!/bin/sh\necho "Cobaia do lab. Push bloqueado."\nexit 1\n' > .git/hooks/pre-push
+printf '#!/bin/sh\necho "Lab guinea pig. Push blocked."\nexit 1\n' > .git/hooks/pre-push
 chmod +x .git/hooks/pre-push
 ```
 
-Depois aponte o `.env` com caminho **absoluto**:
+Then point `.env` to the clones using **absolute** paths:
 
 ```
 MENTORIA_SRC=/home/<user>/lab/src/mentoria
 AUTH_SRC=/home/<user>/lab/src/auth-service
 ```
 
-Caminho relativo resolve diferente para o pytest (relativo ao repo) e para o
-docker compose (relativo a `docker/`). Os dois recusam rodar com caminho
-relativo, justamente para você não perder uma noite nisso.
+Relative paths are resolved differently by `pytest` (relative to the repo) and
+by `docker compose` (relative to `docker/`). Both refuse to run with a relative
+path, so you don't lose a whole night on it.
 
-O repositório `qa-lab` em si é o oposto: **tem** remote no GitHub, é público,
-e é onde o badge verde vive.
+The `qa-lab` repository itself is the opposite: it **does** have a remote on
+GitHub, and it is public.
 
-## Comandos
+### Commands
 
 ```
-make help     lista tudo
-make unit     semana 1 — regras de escopo, sem container
-make up       sobe auth + mentoria + postgres
-make down     para, mantém dados
-make nuke     para e destrói o volume
-make e2e      semanas 2-3
-make api      semana 5
-make data     semana 6
-make all      suíte completa, como o CI roda
-make flaky    cinco execuções seguidas
+make setup    Create the venv and install dependencies
+make unit     Scope rules, no containers
 ```
 
-## Isolamento
+Run `pytest` from `~/lab/qa-lab`. Running it from `~/lab` causes a collection
+error.
 
-Quatro camadas, e nenhuma delas confia nas outras:
+## Isolation from production
 
-1. **`conftest.py` da raiz** aborta a sessão se `BASE_URL`, `AUTH_BASE_URL`,
-   `POSTGRES_HOST` ou `DATABASE_URL` apontarem para fora de `localhost`, ou
-   contiverem `perazzo.cloud`.
-2. **Compose** usa portas altas (15432 / 18001 / 18002), presas a
-   `127.0.0.1`, com rede e volume próprios. Nenhum recurso `external`.
-3. **Clones sem remote** com `pre-push` que recusa.
-4. **Anonimização obrigatória** em todo restore de dump. O `.gitignore`
-   bloqueia `*.dump` e `dumps/`.
+The lab is designed so the clones never talk to production. Four layers, and
+none of them trusts the others:
 
-Testar que a trava funciona (deve abortar):
+1. **Root `conftest.py`** aborts the session if `BASE_URL`, `AUTH_BASE_URL`,
+  `AUTH_SERVICE_URL`, `POSTGRES_HOST`, `DATABASE_URL` or `AUTH_DATABASE_URL`
+  point outside `localhost` or contain `perazzo.cloud`. `AUTH_SERVICE_URL` is also required: if it is missing, the session aborts, because Mentoria falls back to production when it is unset.
+2. **Docker Compose** uses high ports (15432 / 18001 / 18002) bound to
+   `127.0.0.1`, with its own network and volume. No `external` resources.
+3. **Clones without a remote**, with a `pre-push` hook that refuses any push.
+4. **Mandatory anonymization** on every dump restore. `.gitignore` blocks
+   `*.dump` and `dumps/`.
+
+To check the lock works (the session must abort before any test runs):
 
 ```bash
 BASE_URL=https://mentoria.perazzo.cloud pytest tests/unit
 ```
 
-## Roteiro
+## Next
 
-| Semana | Foco | Entregável |
-|---|---|---|
-| 1 | pytest + Git | ≥6 testes de `check_scope`, um PR mergeado |
-| 2 | Playwright nível 0 | 3 E2E de login, zero `wait_for_timeout` |
-| 3 | Playwright nível 1 | `storage_state`, fixtures por API, POM |
-| 4 | CI/CD | pipeline verde, badge, trace na falha |
-| 5 | API | Postman + Newman, 3 bordas por endpoint |
-| 6 | SQL + Docker | 3 oráculos de dados, stack em um comando |
-| 7 | Buffer + README | README em inglês, pirâmide de testes |
-| 8 | Checkpoint | 10 execuções estáveis, lista de bugs reais |
-
-## O que falta confirmar
-
-Três pontos ficaram em aberto e travam a semana 2, não a 1:
-
-1. **Como o mentoria descobre o auth.** Se for URL fixa no código em vez de
-   variável de ambiente, o container do lab tenta falar com a VPS.
-
-   ```bash
-   docker exec mentoria-app sh -c "grep -rn --include='*.py' -iE 'auth.*perazzo|AUTH_URL|AUTH_BASE' /code | grep -v site-packages"
-   ```
-
-2. **Nome real das variáveis de ambiente** dos dois serviços — o compose usa
-   `DATABASE_URL`, `AUTH_BASE_URL` e `JWT_SECRET` como palpite.
-
-   ```bash
-   docker inspect mentoria-app --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -iv -E 'secret|key|password|token'
-   ```
-
-3. **Colunas reais de `mentorando`**, para o `scripts/anonymize.sql`.
-
-### CI e o app sob teste
-
-O workflow da semana 4 precisa do código do app, que não está versionado
-aqui. Duas saídas, ambas defensáveis — a decisão é sua e vira parágrafo do
-README em inglês:
-
-- segundo `checkout` do repo privado com token de acesso
-- publicar imagem do app num registry e o CI só puxar
-
-## Bug candidato, antes do primeiro teste
-
-`get_proprio_mentorando()` normaliza o e-mail **do login** (`strip().lower()`)
-mas compara com o e-mail **armazenado** como está. Se algum `Mentorando` foi
-cadastrado com maiúscula ou espaço sobrando, a busca falha e um usuário
-legítimo recebe 404 "Cadastro pendente — fale com a mentora".
-
-Confirmar no banco real se o cadastro normaliza na escrita. Se não
-normalizar, é item 1 da lista de bugs da semana 8 — e a correção provável é
-`func.lower(Mentorando.email) == email`.
-
-Os casos já estão nomeados em `tests/unit/test_scope.py`, marcados
-`SUSPECTED_BUG`.
+- API scenarios with FastAPI's `TestClient`, one per rule, using
+  `pytest.mark.parametrize` with the rule ids.
+- `conftest.py` fixtures for two mentors (A and B) and a token factory.
+- First end-to-end flow with Playwright: log in through Auth-service, then
+  open your own mentee.
+- CI on GitHub Actions, running the suite on every push and pull request.
