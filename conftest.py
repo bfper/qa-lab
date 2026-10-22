@@ -29,10 +29,15 @@ ALLOWED_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "host.docker.intern
 GUARDED_VARS = (
     "BASE_URL",
     "AUTH_BASE_URL",
+    "AUTH_SERVICE_URL",
     "POSTGRES_HOST",
     "DATABASE_URL",
     "AUTH_DATABASE_URL",
 )
+
+# Variables the app falls back to PRODUCTION for when unset.
+# For these, missing does not mean "skip the check": missing means production.
+REQUIRED_VARS = ("AUTH_SERVICE_URL",)
 
 # Substrings that must never appear in any guarded value.
 FORBIDDEN_SUBSTRINGS = ("perazzo.cloud", "srv1797282")
@@ -106,6 +111,14 @@ def _add_app_source_to_path() -> None:
 # --- runs at import, before any other conftest ------------------------------
 _load_dotenv()
 
+for _var in REQUIRED_VARS:
+    if not os.environ.get(_var):
+        _abort(
+            f"ABORTED: {_var} is not set.\n"
+            f"The app falls back to production when it is missing.\n"
+            f"Set it in .env (see .env.example)."
+        )
+
 for _var in GUARDED_VARS:
     _value = os.environ.get(_var)
     if _value:
@@ -119,6 +132,7 @@ def pytest_report_header(config: pytest.Config) -> list[str]:
     return [
         f"qa-lab: host guard OK (allowed: {', '.join(sorted(ALLOWED_HOSTS))})",
         f"qa-lab: BASE_URL={os.environ.get('BASE_URL', '<unset>')} "
-        f"AUTH={os.environ.get('AUTH_BASE_URL', '<unset>')}",
+        f"AUTH={os.environ.get('AUTH_BASE_URL', '<unset>')} "
+        f"AUTH_SERVICE={os.environ.get('AUTH_SERVICE_URL', '<unset>')}",
         f"qa-lab: MENTORIA_SRC={src}",
     ]

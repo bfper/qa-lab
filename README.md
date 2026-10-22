@@ -135,17 +135,13 @@ The lab is designed so the clones never talk to production. Four layers, and
 none of them trusts the others:
 
 1. **Root `conftest.py`** aborts the session if `BASE_URL`, `AUTH_BASE_URL`,
-   `POSTGRES_HOST` or `DATABASE_URL` point outside `localhost` or contain
-   `perazzo.cloud`.
+  `AUTH_SERVICE_URL`, `POSTGRES_HOST`, `DATABASE_URL` or `AUTH_DATABASE_URL`
+  point outside `localhost` or contain `perazzo.cloud`. `AUTH_SERVICE_URL` is also required: if it is missing, the session aborts, because Mentoria falls back to production when it is unset.
 2. **Docker Compose** uses high ports (15432 / 18001 / 18002) bound to
    `127.0.0.1`, with its own network and volume. No `external` resources.
 3. **Clones without a remote**, with a `pre-push` hook that refuses any push.
 4. **Mandatory anonymization** on every dump restore. `.gitignore` blocks
    `*.dump` and `dumps/`.
-
-> **Known gap (found 2026-10-19):** the lock checks `AUTH_BASE_URL`, but MP
-> Mentoria actually reads `AUTH_SERVICE_URL`, whose default points to
-> production. To be fixed before the first API test.
 
 To check the lock works (the session must abort before any test runs):
 

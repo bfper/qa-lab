@@ -51,6 +51,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-qalab}:${POSTGRES_PASSWORD:-qalab}@postgres:5432/${MENTORIA_DB:-mentoria}
       # CONFIRM the real variable name before trusting this line.
       AUTH_BASE_URL: http://auth:8000
+      AUTH_SERVICE_URL: http://auth:8000
       JWT_SECRET: ${JWT_SECRET:-qalab-not-a-real-secret}
     ports:
       - "127.0.0.1:18002:8000"
