@@ -1,11 +1,10 @@
 """Scope of GET /api/mentorandos/{id}, driven through the API.
 
-Decision table: docs/decision-tables/check-scope.md (R5-R9).
+Decision table: docs/decision-tables/check-scope.md (R1, R5-R9).
 
-R1 (no token) and R4 (token without access to the app) are decided inside the
-real get_current_user, via auth-service introspection. The API layer replaces
-that dependency with `login_as`, so those two rules need a different test
-double and are not covered here yet.
+R4 (token without access to the app) is decided by the auth-service response
+inside the real get_current_user, which the scope tests replace with
+`login_as`. It needs a fake auth-service response and is not covered yet.
 """
 import pytest
 
@@ -64,3 +63,16 @@ def test_get_mentorando_respects_scope(
         assert response.json()["email"] == records[target].email
     else:
         assert OTHER_EMAIL not in response.text
+
+def test_get_mentorando_without_token_gets_401(client, make_mentorando):
+    """R1: no Authorization header.
+
+    No login_as here, so the real get_current_user runs. It rejects a missing
+    token before calling the auth-service, so no network is involved.
+    """
+    own = make_mentorando(email=OWN_EMAIL, nome="Mentorando A")
+
+    response = client.get(f"/api/mentorandos/{own.id}")
+
+    assert response.status_code == 401
+    assert OWN_EMAIL not in response.text
